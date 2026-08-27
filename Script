@@ -173,7 +173,6 @@ def run_backtest(prices, ticker_1, ticker_2, train_end_idx, window, entry_z, exi
 
     return sharpe, max_dd, n_trades
 
-# grid of parameters to test
 windows_to_test = [40, 60, 90]
 entry_z_to_test = [1.5, 2.0, 2.5]
 
