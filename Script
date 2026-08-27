@@ -1,0 +1,189 @@
+import yfinance as yf
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import coint, adfuller
+import matplotlib.pyplot as plt
+
+START_DATE = "2018-01-01"
+END_DATE = "2024-12-31"
+TRAIN_FRAC = 0.7
+ROLLING_WINDOW = 60
+ENTRY_Z = 2.0
+EXIT_Z = 0.5
+TRANSACTION_COST = 0.0005
+
+CANDIDATE_PAIRS = [
+    ("KO", "PEP"),
+    ("V", "MA"),
+    ("XOM", "CVX"),
+    ("JPM", "BAC"),
+    ("HD", "LOW"),
+]
+
+def screen_pairs(pairs, start, end, train_frac):
+    results = []
+    for t1, t2 in pairs:
+        data = yf.download([t1, t2], start=start, end=end)["Close"].dropna()
+        train_end = int(len(data) * train_frac)
+        train = data.iloc[:train_end]
+        _, pvalue, _ = coint(train[t1], train[t2])
+        results.append((t1, t2, pvalue))
+        print(f"{t1}/{t2}: p-value = {pvalue:.4f}")
+    return results
+
+screening_results = screen_pairs(CANDIDATE_PAIRS, START_DATE, END_DATE, TRAIN_FRAC)
+best_pair = min(screening_results, key=lambda x: x[2])
+TICKER_1, TICKER_2, best_pvalue = best_pair
+print(f"\nBest pair: {TICKER_1}/{TICKER_2} (p-value = {best_pvalue:.4f})")
+
+
+prices = yf.download([TICKER_1, TICKER_2], start=START_DATE, end=END_DATE)["Close"].dropna()
+train_end_idx = int(len(prices) * TRAIN_FRAC)
+
+train_prices = prices.iloc[:train_end_idx]
+test_prices = prices.iloc[train_end_idx:]
+
+print(f"\nIn-sample:  {train_prices.index[0].date()} to {train_prices.index[-1].date()}")
+print(f"Out-of-sample: {test_prices.index[0].date()} to {test_prices.index[-1].date()}")
+
+
+X = sm.add_constant(train_prices[TICKER_2])
+model = sm.OLS(train_prices[TICKER_1], X).fit()
+hedge_ratio = model.params[TICKER_2]
+print(f"\nHedge ratio: {hedge_ratio:.4f}")
+
+
+residuals = train_prices[TICKER_1] - hedge_ratio * train_prices[TICKER_2]
+adf_pvalue = adfuller(residuals)[1]
+print(f"ADF p-value on residuals: {adf_pvalue:.4f}")
+
+spread = prices[TICKER_1] - hedge_ratio * prices[TICKER_2]
+rolling_mean = spread.rolling(ROLLING_WINDOW).mean()
+rolling_std = spread.rolling(ROLLING_WINDOW).std()
+zscore = (spread - rolling_mean) / rolling_std
+
+
+def generate_positions(z, entry_z, exit_z):
+    positions = pd.Series(index=z.index, data=0)
+    current_position = 0
+
+    for i in range(1, len(z)):
+        if pd.isna(z.iloc[i]):
+            positions.iloc[i] = current_position
+            continue
+
+        if current_position == 0:
+            if z.iloc[i] > entry_z:
+                current_position = -1
+            elif z.iloc[i] < -entry_z:
+                current_position = 1
+        elif current_position == 1 and z.iloc[i] > -exit_z:
+            current_position = 0
+        elif current_position == -1 and z.iloc[i] < exit_z:
+            current_position = 0
+
+        positions.iloc[i] = current_position
+
+    return positions
+
+positions = generate_positions(zscore, ENTRY_Z, EXIT_Z)
+
+
+positions_lagged = positions.shift(1).fillna(0)
+
+
+spread_returns = spread.diff()
+strategy_returns = positions_lagged * spread_returns
+
+
+position_changes = positions_lagged.diff().abs().fillna(0)
+costs = position_changes * TRANSACTION_COST * spread.abs()
+strategy_returns_net = strategy_returns - costs
+
+
+oos_returns = strategy_returns_net.loc[test_prices.index]
+oos_cumulative = oos_returns.cumsum()
+
+
+sharpe = (oos_returns.mean() / oos_returns.std()) * np.sqrt(252)
+running_max = oos_cumulative.cummax()
+drawdown = oos_cumulative - running_max
+max_drawdown = drawdown.min()
+num_trades = (position_changes.loc[test_prices.index] != 0).sum()
+
+print(f"\n--- Out-of-Sample Results ---")
+print(f"Annualised Sharpe ratio: {sharpe:.3f}")
+print(f"Max drawdown: {max_drawdown:.2f}")
+print(f"Number of trades: {num_trades}")
+print(f"Total cumulative P&L: {oos_cumulative.iloc[-1]:.2f}")
+
+
+fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+axes[0].plot(spread.index, spread, label=f"Spread ({TICKER_1} - β×{TICKER_2})")
+axes[0].axvline(prices.index[train_end_idx], color='red', linestyle='--', label='Train/test split')
+axes[0].legend()
+axes[0].set_title("Spread")
+
+axes[1].plot(zscore.index, zscore, color='darkorange', label='Z-score')
+axes[1].axhline(ENTRY_Z, color='red', linestyle='--', alpha=0.5)
+axes[1].axhline(-ENTRY_Z, color='red', linestyle='--', alpha=0.5)
+axes[1].axhline(0, color='black', alpha=0.3)
+axes[1].axvline(prices.index[train_end_idx], color='red', linestyle='--')
+axes[1].legend()
+axes[1].set_title("Rolling Z-Score")
+
+axes[2].plot(oos_cumulative.index, oos_cumulative, color='green', label='Cumulative strategy P&L (out-of-sample)')
+axes[2].legend()
+axes[2].set_title("Out-of-Sample Cumulative P&L")
+
+plt.tight_layout()
+plt.show()
+
+def run_backtest(prices, ticker_1, ticker_2, train_end_idx, window, entry_z, exit_z, cost):
+    train_prices = prices.iloc[:train_end_idx]
+
+    X = sm.add_constant(train_prices[ticker_1])
+    model = sm.OLS(train_prices[ticker_1], sm.add_constant(train_prices[ticker_2])).fit()
+    hedge_ratio = model.params[ticker_2]
+
+    spread = prices[ticker_1] - hedge_ratio * prices[ticker_2]
+    rolling_mean = spread.rolling(window).mean()
+    rolling_std = spread.rolling(window).std()
+    z = (spread - rolling_mean) / rolling_std
+
+    positions = generate_positions(z, entry_z, exit_z)
+    positions_lagged = positions.shift(1).fillna(0)
+
+    spread_returns = spread.diff()
+    strategy_returns = positions_lagged * spread_returns
+    position_changes = positions_lagged.diff().abs().fillna(0)
+    costs = position_changes * cost * spread.abs()
+    strategy_returns_net = strategy_returns - costs
+
+    test_index = prices.index[train_end_idx:]
+    oos_returns = strategy_returns_net.loc[test_index]
+    oos_cumulative = oos_returns.cumsum()
+
+    sharpe = (oos_returns.mean() / oos_returns.std()) * np.sqrt(252)
+    running_max = oos_cumulative.cummax()
+    max_dd = (oos_cumulative - running_max).min()
+    n_trades = (position_changes.loc[test_index] != 0).sum()
+
+    return sharpe, max_dd, n_trades
+
+# grid of parameters to test
+windows_to_test = [40, 60, 90]
+entry_z_to_test = [1.5, 2.0, 2.5]
+
+print("\n--- Sensitivity Analysis ---")
+print(f"{'Window':<10}{'Entry Z':<10}{'Sharpe':<10}{'Max DD':<10}{'Trades':<10}")
+
+for w in windows_to_test:
+    for ez in entry_z_to_test:
+        sharpe, max_dd, n_trades = run_backtest(
+            prices, TICKER_1, TICKER_2, train_end_idx,
+            window=w, entry_z=ez, exit_z=EXIT_Z, cost=TRANSACTION_COST
+        )
+        print(f"{w:<10}{ez:<10}{sharpe:<10.3f}{max_dd:<10.2f}{n_trades:<10}")
