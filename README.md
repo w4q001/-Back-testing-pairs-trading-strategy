@@ -11,3 +11,8 @@ This project builds and backtests a statistical arbitrage pairs-trading strategy
 - Generate trades — the strategy enters a position when the z-score crosses ±2 (betting the spread reverts), and exits once it moves back within ±0.5 of zero, avoiding excessive trading right at the mean.
 - Avoid look-ahead bias — every trade executes one day after the signal that generated it, since in reality you can't act on a closing price before it's actually known.
 - Account for transaction costs — a cost is applied every time the position changes, so the result reflects something closer to real trading conditions rather than a frictionless ideal.
+
+## The results
+Out of five candidate pairs tested, Visa and Mastercard showed by far the strongest cointegration evidence (Engle-Granger p-value = 0.0068), consistent with them being close competitors in the same business (payment networks) with similar exposure to consumer spending trends. The estimated hedge ratio was 0.52, and the resulting spread passed an Augmented Dickey-Fuller stationarity test with high confidence (p = 0.0013).
+On out-of-sample data the strategy achieved an annualised Sharpe ratio of 1.17, a max drawdown of roughly 10 (in spread units), and executed 27 trades over roughly two years — a sensible trading frequency for the chosen parameters, not excessively active.
+! [graph](backtesting_graph.png)
