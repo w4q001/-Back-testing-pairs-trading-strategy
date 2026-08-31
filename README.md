@@ -17,7 +17,8 @@ Out of five candidate pairs tested, Visa and Mastercard showed by far the strong
 On out-of-sample data the strategy achieved an annualised Sharpe ratio of 1.17, a max drawdown of roughly 10 (in spread units), and executed 27 trades over roughly two years — a sensible trading frequency for the chosen parameters, not excessively active.
 ![graph](backtesting%20graph.png)
 
-## Sensitivity analysis. Rather than trusting this single result, the strategy was rerun across a grid of rolling window lengths (40, 60, 90 days) and entry thresholds (1.5σ, 2.0σ, 2.5σ). The Sharpe ratio stayed positive and broadly consistent across every combination, ranging from 0.86 to 1.33, with the originally reported result sitting comfortably in the middle of that range rather than at either extreme. This is what gives confidence the result reflects a genuine, robust effect rather than a lucky parameter choice.
+## Sensitivity analysis.
+Rather than trusting this single result, the strategy was rerun across a grid of rolling window lengths (40, 60, 90 days) and entry thresholds (1.5σ, 2.0σ, 2.5σ). The Sharpe ratio stayed positive and broadly consistent across every combination, ranging from 0.86 to 1.33, with the originally reported result sitting comfortably in the middle of that range rather than at either extreme. This is what gives confidence the result reflects a genuine, robust effect rather than a lucky parameter choice.
 
 ## How to run this code
 
