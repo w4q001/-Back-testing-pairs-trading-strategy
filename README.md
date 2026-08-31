@@ -31,3 +31,7 @@ You'll need Python installed, along with the following libraries:
 These libraries can be downloaded via the following prompt : pip install yfinance numpy pandas statsmodels matplotlib
 Then run the script directly : python pair_trading.py
 This will show everything stated above alongside the graph
+
+## Assumptions & limitations
+Single pair only — the strategy trades one pair (Visa/Mastercard) rather than a diversified portfolio of multiple pairs, which would smooth out pair-specific risk
+Fixed hedge ratio — the hedge ratio is estimated once on in-sample data and held constant throughout the out-of-sample period, rather than being re-estimated on a rolling basis (e.g. via a Kalman filter), so it may not adapt if the underlying relationship gradually shifts
