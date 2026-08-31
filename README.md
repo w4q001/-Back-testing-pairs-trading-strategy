@@ -16,3 +16,17 @@ This project builds and backtests a statistical arbitrage pairs-trading strategy
 Out of five candidate pairs tested, Visa and Mastercard showed by far the strongest cointegration evidence (Engle-Granger p-value = 0.0068), consistent with them being close competitors in the same business (payment networks) with similar exposure to consumer spending trends. The estimated hedge ratio was 0.52, and the resulting spread passed an Augmented Dickey-Fuller stationarity test with high confidence (p = 0.0013).
 On out-of-sample data the strategy achieved an annualised Sharpe ratio of 1.17, a max drawdown of roughly 10 (in spread units), and executed 27 trades over roughly two years — a sensible trading frequency for the chosen parameters, not excessively active.
 ![graph](backtesting%20graph.png)
+
+## Sensitivity analysis. Rather than trusting this single result, the strategy was rerun across a grid of rolling window lengths (40, 60, 90 days) and entry thresholds (1.5σ, 2.0σ, 2.5σ). The Sharpe ratio stayed positive and broadly consistent across every combination, ranging from 0.86 to 1.33, with the originally reported result sitting comfortably in the middle of that range rather than at either extreme. This is what gives confidence the result reflects a genuine, robust effect rather than a lucky parameter choice.
+
+## How to run this code
+
+You'll need Python installed, along with the following libraries:
+- yfinance — for downloading historical stock price data
+- numpy — for array-based numerical calculations
+- pandas — for time series handling and rolling-window calculations
+- statsmodels — for the cointegration test, OLS regression, and the Augmented Dickey-Fuller test
+- matplotlib — for plotting the spread, z-score, and cumulative P&L
+These libraries can be downloaded via the following prompt : pip install yfinance numpy pandas statsmodels matplotlib
+Then run the script directly : python pair_trading.py
+This will show everything stated above alongside the graph
